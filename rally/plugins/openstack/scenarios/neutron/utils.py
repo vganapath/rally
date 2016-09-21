@@ -342,6 +342,121 @@ class NeutronScenario(scenario.OpenStackScenario):
         self.clients("neutron").remove_interface_router(
             router["id"], {"subnet_id": subnet["id"]})
 
+    @atomic.optional_action_timer("neutron.create_loadbalancer")
+    def _create_loadbalancer(self, subnet_id, **lb_create_args):
+        """Create LB loadbalancer(v2)
+
+        :param subnet_id: str, neutron subnet-id
+        :param pool_create_args: dict, POST /lb/pools request options
+        :param atomic_action: True if this is an atomic action. added
+                              and handled by the
+                              optional_action_timer() decorator
+        :returns: dict, neutron lb pool
+        """
+        args = {"name": self.generate_random_name(),
+                "vip_subnet_id": subnet_id}
+        args.update(lb_create_args)
+        return self.clients("neutron").create_loadbalancer({"loadbalancer": args})
+
+    def _create_v2_loadbalancer(self, networks, **lb_create_args):
+        """Create LB loadbalancer(v2)
+
+        :param networks: list, neutron networks
+        :param pool_create_args: dict, POST /lb/pools request options
+        :returns: list, neutron lb pools
+        """
+        subnets = []
+        lb = []
+        for net in networks:
+            subnets.extend(net.get("subnets", []))
+        with atomic.ActionTimer(self, "neutron.create_%s_lbs" %
+                                len(subnets)):
+            for subnet_id in subnets:
+                lb.append(self._create_loadbalancer(
+                    subnet_id, atomic_action=False, **lb_create_args))
+        return lb
+
+    @atomic.action_timer("neutron.delete_loadbalancer")
+    def _delete_v2_loadbalancer(self, lb):
+        """Delete neutron vip.
+
+        :param vip: neutron Virtual IP object
+        """
+        self.clients("neutron").delete_loadbalancer(lb)
+
+    @atomic.action_timer("neutron.create_listener")
+    def _create_v2_listener(self, lb, **listener_create_args):
+        """Create Listener(lbaasv2)
+
+        :parm pool: dict, neutron lb-pool
+        :parm vip_create_args: dict, POST /lb/vips request options
+        :returns: dict, neutron lb vip
+        """
+        args = {"protocol": self.LB_PROTOCOL,
+                "protocol_port": self.LB_PROTOCOL_PORT,
+                "name": self.generate_random_name(),
+                "loadbalancer_id": lb["loadbalancer"]["id"]}
+        args.update(listener_create_args)
+        return self.clients("neutron").create_listener({"listener": args})
+
+    @atomic.action_timer("neutron.delete_listener")
+    def _delete_v2_listener(self, listener):
+        """Delete neutron vip.
+
+        :param vip: neutron Virtual IP object
+        """
+        self.clients("neutron").delete_listener(listener)
+
+    @atomic.optional_action_timer("neutron.create_lbaas_pool")
+    def _create_v2_pool(self, listener, **pool_create_args):
+        """Create LB pool(v2)
+
+        :param subnet_id: str, neutron subnet-id
+        :param pool_create_args: dict, POST /lb/pools request options
+        :param atomic_action: True if this is an atomic action. added
+                              and handled by the
+                              optional_action_timer() decorator
+        :returns: dict, neutron lb pool
+        """
+        args = {"lb_algorithm": self.LB_METHOD,
+                "protocol": self.LB_PROTOCOL,
+                "name": self.generate_random_name(),
+                "listener_id": listener["listener"]["id"]}
+        args.update(pool_create_args)
+        return self.clients("neutron").create_lbaas_pool({"pool": args})
+
+    @atomic.action_timer("neutron.delete_listener")
+    def _delete_v2_pool(self, pool):
+        """Delete loadbalancer pool.
+
+        :param vip: neutron Virtual IP object
+        """
+        self.clients("neutron").delete_lbaas_pool(pool)
+
+    @atomic.optional_action_timer("neutron.create_lbaas_member")
+    def _create_v2_pool_member(self, subnet_id, pool, **mem_create_args):
+        """Create LB pool member (v2)
+
+        :param subnet_id: str, neutron subnet-id
+        :param pool_create_args: dict, POST /lb/pools request options
+        :param atomic_action: True if this is an atomic action. added
+                              and handled by the
+                              optional_action_timer() decorator
+        :returns: dict, neutron lb pool
+        """
+        args = {"subnet_id": subnet_id,
+                "protocol_port": self.LB_PROTOCOL_PORT}
+        args.update(mem_create_args)
+        return self.clients("neutron").create_lbaas_member(pool["pool"]["id"], {"member": args})
+
+    @atomic.action_timer("neutron.delete_pool_member")
+    def _delete_v2_pool_member(self, member, pool):
+        """Delete lbaas pool member.
+
+        :param vip: neutron Virtual IP object
+        """
+        self.clients("neutron").delete_lbaas_member(member, pool)
+
     @atomic.optional_action_timer("neutron.create_pool")
     def _create_lb_pool(self, subnet_id, **pool_create_args):
         """Create LB pool(v1)
