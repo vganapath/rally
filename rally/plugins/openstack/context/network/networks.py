@@ -92,7 +92,7 @@ class Network(context.Context):
                 network_create_args = self.config["network_create_args"].copy()
                 network = net_wrapper.create_network(
                     tenant_id,
-                    add_router=True,
+                    add_router=False,
                     subnets_num=self.config["subnets_per_network"],
                     network_create_args=network_create_args,
                     **kwargs)
@@ -100,6 +100,7 @@ class Network(context.Context):
 
     @logging.log_task_wrapper(LOG.info, _("Exit context: `network`"))
     def cleanup(self):
+        pass
         net_wrapper = network_wrapper.wrap(
             osclients.Clients(self.context["admin"]["credential"]),
             self, config=self.config)
